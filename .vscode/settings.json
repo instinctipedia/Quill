@@ -1,0 +1,8 @@
+{
+    "editor.codeActionsOnSave": {
+        "source.organizeImports": "never",
+        "source.fixAll": "never"
+    },
+    "typescript.preferences.organizeImports": true,
+    "javascript.preferences.organizeImports": true
+}
