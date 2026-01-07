@@ -1,30 +1,52 @@
-"use client"
-
-import { useState } from "react";
-
-export default function Home() {
-  const [text, setText] = useState("");
-
+export default function HomePage() {
   return (
-    <main className="min-h-screen flex items-center justify-center bg-zinc-50">
-      <div className="w-full max-w-md rounded-xl border bg-white p-6 shadow-sm">
-        <h1 className="text-2xl font-semibold">Hello 👋</h1>
-        <p className="mt-2 text-zinc-600">This is my app. I built this.</p>
+    <main
+      style={{
+        minHeight: "100vh",
+        display: "flex",
+        alignItems: "center",
+        justifyContent: "center",
+        padding: "2rem",
+        background: "#fff",
+      }}
+    >
+      <div
+        style={{
+          maxWidth: 520,
+          width: "100%",
+          border: "1px solid #e5e5e5",
+          borderRadius: 14,
+          padding: "2rem",
+        }}
+      >
+        <h1 style={{ fontSize: "1.6rem", marginBottom: "0.75rem" }}>
+          Quill
+        </h1>
 
-        <div className="mt-6 flex gap-2">
-          <input
-            className="flex-1 rounded-lg border px-3 py-2"
-            placeholder="Type something..."
-            value={text}
-            onChange={(e) => setText(e.target.value)}
-          />
+        <p style={{ lineHeight: 1.6, marginBottom: "1.25rem" }}>
+          A human-first space to talk through safety, concern, and uncertainty —
+          without judgement, pressure, or forms.
+        </p>
 
-          <button
-            className="rounded-lg bg-zinc-900 px-4 py-2 text-white font-medium"
-          >
-            Submit
-          </button>
-        </div>
+        <p style={{ lineHeight: 1.6, marginBottom: "1.5rem", color: "#555" }}>
+          You can raise a safety issue, ask a question, or just explain what’s
+          going on. Anonymous by default.
+        </p>
+
+        <a
+          href="/report"
+          style={{
+            display: "inline-block",
+            padding: "0.6rem 1.1rem",
+            borderRadius: 8,
+            background: "#111",
+            color: "#fff",
+            textDecoration: "none",
+            fontWeight: 500,
+          }}
+        >
+          Start a conversation
+        </a>
       </div>
     </main>
   );
