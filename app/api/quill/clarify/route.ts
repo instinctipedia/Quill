@@ -155,6 +155,8 @@ function deterministicClarify(text: string): { reply: string; follow_up_question
 
 async function supportReply(text: string) {
   const apiKey = process.env.OPENAI_API_KEY;
+if (!apiKey) return { status:"error", error:"OPENAI_API_KEY not set" };
+const openai = new OpenAI({ apiKey });
 
   if (!apiKey) {
     return {
