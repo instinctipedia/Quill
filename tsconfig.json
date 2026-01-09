@@ -29,6 +29,6 @@
     ".next/types/**/*.ts",
     ".next/dev/types/**/*.ts",
     "**/*.mts"
-, "app/api/quill/explorep/explore", "lib/quillOpeners.ts", "app/quill/explore.t/explore"  ],
+, "app/api/quill/explorep/explore", "lib/quillOpeners.ts", "app/quill/explore.t/explore", "app/quill/grounding/route.ts.HISTORIC", "app/quill/grounding/route.ts.HISTORIC", "app/api/quill/HISTORIC/route.ts.HISTORIC", "app/quill/grounding/route.ts.BAK"  ],
   "exclude": ["node_modules"]
 }

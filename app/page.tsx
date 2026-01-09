@@ -80,16 +80,14 @@ function start() {
           padding: "2rem",
         }}
       >
-        <h1 style={{ fontSize: "1.6rem", marginBottom: "0.75rem" }}>Quill</h1>
+        <h1 style={{ fontSize: "2.0rem", marginBottom: "0.75rem" }}>Quill</h1>
 
-        <p style={{ lineHeight: 1.6, marginBottom: "1.25rem" }}>
-          A human-first space to talk through safety, concern, and uncertainty —
-          without judgement, pressure, or forms.
+        <p style={{ lineHeight: 1.8, marginBottom: "1.25rem" }}>
+          If nobody is asking questions, they’re either lost, scared, or guessing — and all three are dangerous. 
         </p>
 
         <p style={{ lineHeight: 1.6, marginBottom: "1.25rem", color: "#555" }}>
-          You can raise a safety issue, ask a question, or just explain what’s going
-          on. Anonymous by default.
+          This is an app for anonymously reporting safety concerns or to assist in helping you locate industry guidance.
         </p>
 
         <div style={{ marginBottom: "1.25rem" }}>

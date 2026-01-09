@@ -79,25 +79,54 @@ Schema:
 
 Rules:
 - Absolutely DO NOT include imageUrl or imageAlt.
-- Default cases: 2. If moreCases=true: 4.
-- "uk" = UK Acts/Regs with specific section/reg + legislation.gov.uk links where possible.
-- "international" = maritime / global framework (IMO/ISM/SOLAS/STCW, ISO where relevant).
-- "guidance" = IMCA, ACOP/industry guidance/best practice.
-- Do not invent accident reports or fake citations. If unsure, omit sourceUrl.
-- If explainLaw=true, fill explainLaw with practical plain-English meaning.
+- Default cases: 3. If moreCases=true: 8.
+- Always return an "hse" array with at least 3 relevant section if possible, preferred 5.
+Where possible, cite real laws/regulations/guidance/standards/best-practice with URLs; if not certain, name the law/regulation and duty without a URL.
+- Aim to include, where you can:
+  - one "uk" section,
+  - one "IMO" section, and
+  - one "guidance" section.
+  - one "best-practice" section.
+  - one "Regulatory" section
+- For "uk": use real UK Acts/Regs with section/reg where you can
+  (e.g. HSWA 1974, MHSWR 1999, LOLER, PUWER, Workplace Regs, Docks Regs),
+  each with:
+    - "name": the law or duty,
+    - "detail": a short plain-English explanation of what it means offshore,
+    - "minimum of 5 sentence explanation"
+    - "url": an official or authoritative link (prefer legislation.gov.uk or HSE).
+- For "international": use relevant IMO / ISM Code / SOLAS / STCW / ISO frameworks
+  with plain-English detail and a sensible official or recognised guidance URL where possible.
+- For "guidance": use IMCA, HSE guidance notes, MCA, or recognised industry best practice.
+  Explain what the guidance is about and how it connects to the concern.
+- Do not invent specific accident reports or fake citations. If you are not sure, omit "sourceUrl" for that item.
+- If explainLaw=true, fill "explainLaw" with a short, practical summary of
+  what the law or duty means in everyday offshore work (who must do what, and why it matters).
+- You do not need to be exhaustive; pick a small set of the most relevant items quickly and clearly.
+- Always provide reference setions or regulation numbers where possible.
 `.trim();
 
   const user = JSON.stringify({ concern, moreCases, explainLaw });
 
-  const result = await openai.chat.completions.create({
-    model: "gpt-4o-mini",
-    temperature: 0.3,
-    response_format: { type: "json_object" },
-    messages: [
-      { role: "system", content: system },
-      { role: "user", content: user },
-    ],
-  });
+  let result;
+  try {
+    result = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    });
+  } catch (err: any) {
+    console.error("❌ OpenAI error in /api/quill/grounding:", err);
+    return {
+      status: "error",
+      error: "AI is temporarily unavailable or rate-limited. Try again later.",
+    };
+  }
+
 
   const raw = result.choices?.[0]?.message?.content ?? "";
   let parsed: any;

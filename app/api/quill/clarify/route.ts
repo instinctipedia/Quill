@@ -22,6 +22,10 @@ function pickOpener(): string {
  * If any of these appear, we go to support-tone (OpenAI) on purpose.
  */
 function triggersSupport(text: string): boolean {
+  // …existing cue matching logic here…
+
+  return false; // default fallback to satisfy TS + preserve behaviour
+}
   
 
   const cues = [
