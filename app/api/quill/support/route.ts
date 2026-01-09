@@ -116,7 +116,8 @@ Rules:
 -Name the repetition gently (e.g. “I hear that this hasn’t shifted”).
 -Stay present rather than moving the conversation forward.
 
-User text:
+
+
 ${text}
 `.trim();
 
