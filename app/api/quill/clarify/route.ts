@@ -21,13 +21,8 @@ function pickOpener(): string {
  * SUPPORT triggers (expanded as requested).
  * If any of these appear, we go to support-tone (OpenAI) on purpose.
  */
-function triggersSupport(text: string): boolean {
-  // …existing cue matching logic here…
-
-  return false; // default fallback to satisfy TS + preserve behaviour
-}
   
-
+function triggersSupport(text: string): boolean {
   const cues = [
     // explicit distress
     "i'm scared",
@@ -73,9 +68,10 @@ function triggersSupport(text: string): boolean {
     "family issue",
   ];
 
-  const t = String(text).toLowerCase();
+  const t = text.toLowerCase();
+  return false;
 }
-
+  
 function isVeryShort(text: string): boolean {
   return text.trim().length < 25;
 }
