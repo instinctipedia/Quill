@@ -3,213 +3,171 @@ import { NextResponse } from "next/server";
 
 export const runtime = "nodejs";
 
-export async function GET() {
-  return NextResponse.json({
-    status: "ok",
-    note: "POST { concern } to this route.",
-  });
-}
-
-type Incident = {
+type CaseItem = {
   title: string;
-  date: string;
-  what_happened: string;
-  why_relevant: string[];
-  source_url: string;
+  date?: string;
+  summary?: string;
+  sourceUrl?: string;
+  severity: 1 | 2 | 3 | 4 | 5;
 };
 
-type LegislationItem = { title: string; why_it_applies: string; link: string };
+type HSEOrigin = "uk" | "international" | "guidance";
 
-function coerceLegislation(parsed: any): LegislationItem[] | null {
-  // Accept either:
-  // 1) legislation: [ { title, why_it_applies, link } ... ]
-  // 2) legislation: { items: [ { name, duty, link } ... ] } (older schema)
-  const leg = parsed?.legislation;
+type HSESection = {
+  title: string;
+  origin: HSEOrigin;
+  items: { name: string; detail?: string; url?: string }[];
+};
 
-  if (Array.isArray(leg)) {
-    const cleaned = leg
-      .map((x: any) => ({
-        title: String(x?.title ?? "").trim(),
-        why_it_applies: String(x?.why_it_applies ?? "").trim(),
-        link: String(x?.link ?? "").trim(),
-      }))
-      .filter((x: LegislationItem) => x.title && x.why_it_applies && x.link);
-    return cleaned.length ? cleaned : null;
+type GroundingResponse = {
+  status: "ok" | "no_match" | "error";
+  concern?: string;
+  note?: string;
+  cases?: CaseItem[];
+  allCasesCount?: number;
+  hse?: HSESection[];
+  explainLaw?: { title: string; text: string } | null;
+  error?: string;
+};
+
+const openai = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
+
+function isValidResponseShape(x: any): x is GroundingResponse {
+  if (!x || typeof x !== "object") return false;
+  if (x.status !== "ok" && x.status !== "no_match" && x.status !== "error") return false;
+
+  if (x.status === "ok") {
+    if (typeof x.concern !== "string") return false;
+    if (!Array.isArray(x.cases)) return false;
+    if (!Array.isArray(x.hse)) return false;
   }
-
-  const items = leg?.items;
-  if (Array.isArray(items)) {
-    const cleaned = items
-      .map((x: any) => ({
-        title: String(x?.name ?? "").trim(),
-        why_it_applies: String(x?.duty ?? "").trim(),
-        link: String(x?.link ?? "").trim(),
-      }))
-      .filter((x: LegislationItem) => x.title && x.why_it_applies && x.link);
-    return cleaned.length ? cleaned : null;
-  }
-
-  return null;
+  return true;
 }
 
-type Tier = "fatal_or_life_altering" | "serious_injury" | "incident";
+async function aiResponse(
+  concern: string,
+  moreCases: boolean,
+  explainLaw: boolean
+): Promise<GroundingResponse> {
+  if (!process.env.OPENAI_API_KEY) {
+    return { status: "error", error: "OPENAI_API_KEY is not set on the server." };
+  }
 
-function buildPrompt(tier: Tier, concern: string): string {
-  const tierLine =
-    tier === "fatal_or_life_altering"
-      ? "Find EXACTLY ONE real-world OFFSHORE fatality OR life-altering injury incident"
-      : tier === "serious_injury"
-      ? "Find EXACTLY ONE real-world OFFSHORE serious injury incident (non-fatal, but major harm)"
-      : "Find EXACTLY ONE real-world OFFSHORE incident/accident (significant event; may be dangerous occurrence/near miss)";
-
-  const tierConstraint =
-    tier === "fatal_or_life_altering"
-      ? "- Extreme-only: fatality or life-altering injury"
-      : tier === "serious_injury"
-      ? "- Serious-injury: non-fatal but major harm (e.g., hospitalisation/major trauma/amputation etc.)"
-      : "- Significant incident: credible severe potential (still offshore-only).";
-
-  return `
-Return STRICT JSON ONLY.
-
-${tierLine}
-where the user's concern would be a clear contributory factor.
-
-Hard constraints:
-- Offshore-only (platform, rig, vessel, offshore wind, marine ops)
-${tierConstraint}
-- Exactly ONE incident (no multiples)
-- Prefer UK sources (HSE, MAIB). If none, best offshore source
-- Do NOT fabricate
-- If you cannot verify, return status="no_match"
-- Provide ONE source_url
-
-Then provide UK HSE legislation duties (Acts/Regs only) with plain-English duties.
-
-Legislation rules (IMPORTANT):
-- Acts/Regs only (no guidance)
-- 2–5 items
-- Each item MUST cite a specific section/regulation (e.g. "HSWA 1974 s.2(1)-(2)", "MHSWR 1999 reg.3")
-- Each item link MUST be a legislation.gov.uk link that goes to that specific section/regulation page
-  (not the top of the Act/Regs)
+  const system = `
+Return STRICT JSON only (no markdown, no commentary).
 
 Schema:
 {
-  "status": "ok" | "no_match",
-  "incident": {
+  "status": "ok" | "no_match" | "error",
+  "concern": string,
+  "cases": Array<{
     "title": string,
-    "date": string,
-    "what_happened": string,
-    "why_relevant": string[],
-    "source_url": string
-  } | null,
-  "legislation": {
+    "date"?: string,
+    "summary"?: string,
+    "sourceUrl"?: string,
+    "severity": 1|2|3|4|5
+  }>,
+  "allCasesCount"?: number,
+  "hse": Array<{
     "title": string,
-    "why_it_applies": string,
-    "link": string
-  }[] | null
+    "origin": "uk" | "international" | "guidance",
+    "items": Array<{ "name": string, "detail"?: string, "url"?: string }>
+  }>,
+  "explainLaw"?: { "title": string, "text": string } | null,
+  "note"?: string
 }
 
-User concern:
-${concern}
+Rules:
+- Absolutely DO NOT include imageUrl or imageAlt.
+- Default cases: 3. If moreCases=true: 8.
+- Always return an "hse" array with at least 3 relevant section if possible, preferred 5.
+Where possible, cite real laws/regulations/guidance/standards/best-practice with URLs; if not certain, name the law/regulation and duty without a URL.
+- Aim to include, where you can:
+  - one "uk" section,
+  - one "IMO" section, and
+  - one "guidance" section.
+  - one "best-practice" section.
+  - one "Regulatory" section
+- For "uk": use real UK Acts/Regs with section/reg where you can
+  (e.g. HSWA 1974, MHSWR 1999, LOLER, PUWER, Workplace Regs, Docks Regs),
+  each with:
+    - "name": the law or duty,
+    - "detail": a short plain-English explanation of what it means offshore,
+    - "minimum of 5 sentence explanation"
+    - "url": an official or authoritative link (prefer legislation.gov.uk or HSE).
+- For "international": use relevant IMO / ISM Code / SOLAS / STCW / ISO frameworks
+  with plain-English detail and a sensible official or recognised guidance URL where possible.
+- For "guidance": use IMCA, HSE guidance notes, MCA, or recognised industry best practice.
+  Explain what the guidance is about and how it connects to the concern.
+- Do not invent specific accident reports or fake citations. If you are not sure, omit "sourceUrl" for that item.
+- If explainLaw=true, fill "explainLaw" with a short, practical summary of
+  what the law or duty means in everyday offshore work (who must do what, and why it matters).
+- You do not need to be exhaustive; pick a small set of the most relevant items quickly and clearly.
+- Always provide reference setions or regulation numbers where possible.
 `.trim();
-}
 
-async function callTier(
-  client: OpenAI,
-  tier: Tier,
-  concern: string
-): Promise<
-  | { status: "ok"; incident: Incident; legislation: LegislationItem[] | null }
-  | { status: "no_match" }
-> {
-  const prompt = buildPrompt(tier, concern);
+  const user = JSON.stringify({ concern, moreCases, explainLaw });
 
-  const resp = await client.chat.completions.create({
-    model: "gpt-4o-mini",
-    messages: [
-      { role: "system", content: "Return STRICT JSON ONLY. No markdown. No extra keys." },
-      { role: "user", content: prompt },
-    ],
-    temperature: 0.1,
-  });
-
-  const content = resp.choices[0]?.message?.content;
-  if (!content) return { status: "no_match" };
-
-  let parsed: any;
+  let result;
   try {
-    parsed = JSON.parse(content);
-  } catch {
-    return { status: "no_match" };
-  }
-
-  if (parsed?.status !== "ok" || !parsed?.incident) return { status: "no_match" };
-
-  const incident: Incident = {
-    title: String(parsed.incident?.title ?? "").trim(),
-    date: String(parsed.incident?.date ?? "").trim(),
-    what_happened: String(parsed.incident?.what_happened ?? "").trim(),
-    why_relevant: Array.isArray(parsed.incident?.why_relevant)
-      ? parsed.incident.why_relevant.map((x: any) => String(x ?? "").trim()).filter(Boolean)
-      : [],
-    source_url: String(parsed.incident?.source_url ?? "").trim(),
-  };
-
-  if (!incident.title || !incident.date || !incident.what_happened || !incident.source_url) {
-    return { status: "no_match" };
-  }
-
-  const legislation = coerceLegislation(parsed);
-
-  return { status: "ok", incident, legislation };
-}
-
-export async function POST(req: Request): Promise<Response> {
-  try {
-    const body = await req.json().catch(() => ({}));
-    const concern = String(body?.concern ?? "").trim();
-
-    if (!concern) {
-      return NextResponse.json({ error: "Missing concern" }, { status: 400 });
-    }
-
-    if (!process.env.OPENAI_API_KEY) {
-      return NextResponse.json({ error: "OPENAI_API_KEY missing" }, { status: 500 });
-    }
-
-    const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
-
-    const tiers: Tier[] = ["fatal_or_life_altering", "serious_injury", "incident"];
-
-    for (const tier of tiers) {
-      const out = await callTier(client, tier, concern);
-
-      if (out.status === "ok") {
-        return NextResponse.json({
-          status: "ok",
-          tier,
-          incident: out.incident,
-          legislation: out.legislation,
-          note:
-            tier === "fatal_or_life_altering"
-              ? "Matched fatal/life-altering tier."
-              : tier === "serious_injury"
-              ? "No verified fatal/life-altering match found; returned a verified serious-injury case instead."
-              : "No verified fatal/serious-injury match found; returned a verified offshore incident/accident instead.",
-        });
-      }
-    }
-
-    return NextResponse.json({
-      status: "no_match",
-      incident: null,
-      legislation: null,
-      note:
-        "I couldn’t verify a suitable offshore case from your description. Go back and add 1–2 lines: task, equipment, what’s under tension/moving, where people stand, and what control is missing.",
+    result = await openai.chat.completions.create({
+      model: "gpt-4o-mini",
+      temperature: 0.3,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
     });
-  } catch (err) {
-    console.error("❌ POST /api/quill/grounding crashed:", err);
-    return NextResponse.json({ error: "Internal Server Error" }, { status: 500 });
+  } catch (err: any) {
+    console.error("❌ OpenAI error in /api/quill/grounding:", err);
+    return {
+      status: "error",
+      error: "AI is temporarily unavailable or rate-limited. Try again later.",
+    };
   }
+
+
+  const raw = result.choices?.[0]?.message?.content ?? "";
+  let parsed: any;
+
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return { status: "error", error: "AI returned non-JSON output." };
+  }
+
+  if (!isValidResponseShape(parsed)) {
+    return { status: "error", error: "AI JSON did not match expected schema." };
+  }
+
+  if (parsed.status === "ok" && Array.isArray(parsed.cases)) {
+    const target = moreCases ? 4 : 2;
+    parsed.cases = parsed.cases.slice(0, target);
+    parsed.allCasesCount =
+      typeof parsed.allCasesCount === "number" ? parsed.allCasesCount : parsed.cases.length;
+  }
+
+  return parsed;
+}
+
+export async function GET(req: Request) {
+  const { searchParams } = new URL(req.url);
+
+  const concern = (searchParams.get("concern") || "").trim();
+  const moreCases = searchParams.get("more_cases") === "1";
+  const explainLaw = searchParams.get("explain_law") === "1";
+
+  if (!concern) {
+    return NextResponse.json(
+      { status: "error", error: "Missing concern." },
+      { status: 400 }
+    );
+  }
+
+  // AI-only. No static fallback.
+  const ai = await aiResponse(concern, moreCases, explainLaw);
+
+  // Always return 200 so GroundingClient can read JSON and show the error message cleanly.
+  return NextResponse.json(ai, { status: 200 });
 }
