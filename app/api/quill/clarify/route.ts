@@ -154,7 +154,9 @@ function deterministicClarify(text: string): { reply: string; follow_up_question
 }
 
 async function supportReply(text: string) {
-  if (!process.env.OPENAI_API_KEY) {
+  const apiKey = process.env.OPENAI_API_KEY;
+
+  if (!apiKey) {
     return {
       reply:
         "I’ve got you. Quick check — are you safe right now and away from anything immediate?\n\n" +
@@ -162,6 +164,7 @@ async function supportReply(text: string) {
       follow_up_question: "Do you want comfort first, or a practical plan first?",
     };
   }
+
 
   const client = new OpenAI({ apiKey: process.env.OPENAI_API_KEY });
 
